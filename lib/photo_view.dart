@@ -234,6 +234,8 @@ class PhotoView extends StatefulWidget {
     this.scaleStateCycle,
     this.onTapUp,
     this.onTapDown,
+    this.isCanVerticalSlide = false,
+    this.index,
   })  : child = null,
         childSize = null,
         super(key: key);
@@ -263,6 +265,8 @@ class PhotoView extends StatefulWidget {
     this.scaleStateCycle,
     this.onTapUp,
     this.onTapDown,
+    this.isCanVerticalSlide = false,
+    this.index,
   })  : loadingChild = null,
         imageProvider = null,
         gaplessPlayback = false,
@@ -343,14 +347,17 @@ class PhotoView extends StatefulWidget {
   /// location.
   final PhotoViewImageTapDownCallback onTapDown;
 
+  final bool isCanVerticalSlide;
+
+  final int index;
+
   @override
   State<StatefulWidget> createState() {
     return _PhotoViewState();
   }
 }
 
-class _PhotoViewState extends State<PhotoView>
-    with AfterLayoutMixin<PhotoView> {
+class _PhotoViewState extends State<PhotoView> with AfterLayoutMixin<PhotoView>, AutomaticKeepAliveClientMixin {
   bool _loading;
   Size _childSize;
   Size _outerSize;
@@ -363,16 +370,13 @@ class _PhotoViewState extends State<PhotoView>
 
   Future<ImageInfo> _getImage() {
     final Completer completer = Completer<ImageInfo>();
-    final ImageStream stream =
-        widget.imageProvider.resolve(const ImageConfiguration());
-    final listener =
-        ImageStreamListener((ImageInfo info, bool synchronousCall) {
+    final ImageStream stream = widget.imageProvider.resolve(const ImageConfiguration());
+    final listener = ImageStreamListener((ImageInfo info, bool synchronousCall) {
       if (!completer.isCompleted) {
         completer.complete(info);
         if (mounted) {
           setState(() {
-            _childSize =
-                Size(info.image.width.toDouble(), info.image.height.toDouble());
+            _childSize = Size(info.image.width.toDouble(), info.image.height.toDouble());
             _loading = false;
           });
         }
@@ -473,13 +477,12 @@ class _PhotoViewState extends State<PhotoView>
 
   @override
   Widget build(BuildContext context) {
-    return widget.child == null
-        ? _buildImage(context)
-        : _buildCustomChild(context);
+    return widget.child == null ? _buildImage(context) : _buildCustomChild(context);
   }
 
   Widget _buildCustomChild(BuildContext context) {
     return PhotoViewImageWrapper.customChild(
+      index: widget.index,
       customChild: widget.child,
       backgroundDecoration: widget.backgroundDecoration,
       enableRotation: widget.enableRotation,
@@ -499,13 +502,12 @@ class _PhotoViewState extends State<PhotoView>
       ),
       onTapUp: widget.onTapUp,
       onTapDown: widget.onTapDown,
+      isCanVerticalSlide: widget.isCanVerticalSlide,
     );
   }
 
   Widget _buildImage(BuildContext context) {
-    return widget.heroTag == null
-        ? _buildWithFuture(context)
-        : _buildSync(context);
+    return widget.heroTag == null ? _buildWithFuture(context) : _buildSync(context);
   }
 
   Widget _buildWithFuture(BuildContext context) {
@@ -529,6 +531,7 @@ class _PhotoViewState extends State<PhotoView>
 
   Widget _buildWrapperImage(BuildContext context) {
     return PhotoViewImageWrapper(
+      index:widget.index,
       imageProvider: widget.imageProvider,
       backgroundDecoration: widget.backgroundDecoration,
       gaplessPlayback: widget.gaplessPlayback,
@@ -550,6 +553,7 @@ class _PhotoViewState extends State<PhotoView>
       ),
       onTapUp: widget.onTapUp,
       onTapDown: widget.onTapDown,
+      isCanVerticalSlide: widget.isCanVerticalSlide,
     );
   }
 
@@ -565,8 +569,10 @@ class _PhotoViewState extends State<PhotoView>
           );
   }
 
-  Size get _computedOuterSize =>
-      widget.customSize ?? _outerSize ?? MediaQuery.of(context).size;
+  Size get _computedOuterSize => widget.customSize ?? _outerSize ?? MediaQuery.of(context).size;
+
+  @override
+  bool get wantKeepAlive => true;
 }
 
 /// The default [ScaleStateCycle]

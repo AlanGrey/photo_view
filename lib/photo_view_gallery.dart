@@ -5,13 +5,13 @@ import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/src/photo_view_controller.dart';
 import 'package:photo_view/src/photo_view_image_wrapper.dart';
 import 'package:photo_view/src/photo_view_scale_state.dart';
+import 'package:photo_view/src/photo_view_pageview_wrapper.dart';
 
 /// A type definition for a [Function] that receives a index after a page change in [PhotoViewGallery]
 typedef PhotoViewGalleryPageChangedCallback = void Function(int index);
 
 /// A type definition for a [Function] that defines a page in [PhotoViewGallery.build]
-typedef PhotoViewGalleryBuilder = PhotoViewGalleryPageOptions Function(
-    BuildContext context, int index);
+typedef PhotoViewGalleryBuilder = PhotoViewGalleryPageOptions Function(BuildContext context, int index);
 
 /// A [StatefulWidget] that shows multiple [PhotoView] widgets in a [PageView]
 ///
@@ -83,6 +83,7 @@ class PhotoViewGallery extends StatefulWidget {
     this.transitionOnUserGestures = false,
     this.scrollPhysics,
     this.scrollDirection = Axis.horizontal,
+    this.usePageViewWrapper = false,
   })  : _isBuilder = false,
         itemCount = null,
         builder = null,
@@ -108,6 +109,7 @@ class PhotoViewGallery extends StatefulWidget {
     this.transitionOnUserGestures = false,
     this.scrollPhysics,
     this.scrollDirection = Axis.horizontal,
+    this.usePageViewWrapper = false,
   })  : _isBuilder = true,
         pageOptions = null,
         assert(itemCount != null),
@@ -161,6 +163,9 @@ class PhotoViewGallery extends StatefulWidget {
 
   final bool _isBuilder;
 
+  ///A bool indicate to use [PageViewWrapper]
+  final bool usePageViewWrapper;
+
   @override
   State<StatefulWidget> createState() {
     return _PhotoViewGalleryState();
@@ -179,12 +184,13 @@ class _PhotoViewGalleryState extends State<PhotoViewGallery> {
   }
 
   void scaleStateChangedCallback(PhotoViewScaleState scaleState) {
-    setState(() {
-      _locked = (scaleState == PhotoViewScaleState.initial ||
-              scaleState == PhotoViewScaleState.zoomedOut)
-          ? false
-          : true;
-    });
+    if (!widget.usePageViewWrapper) {
+      setState(() {
+        _locked =
+            (scaleState == PhotoViewScaleState.initial || scaleState == PhotoViewScaleState.zoomedOut) ? false : true;
+      });
+    }
+
     if (widget.scaleStateChangedCallback != null) {
       widget.scaleStateChangedCallback(scaleState);
     }
@@ -203,6 +209,33 @@ class _PhotoViewGalleryState extends State<PhotoViewGallery> {
 
   @override
   Widget build(BuildContext context) {
+    return widget.usePageViewWrapper ? _getPageViewWrapper() : _getPageView();
+  }
+
+  PageViewWrapper _getPageViewWrapper() {
+    final pageChangeListeners = OnPageChangedWrapper();
+    pageChangeListeners.addListener(widget.onPageChanged);
+
+    final customController =
+        PageViewWrapperController(pageViewController: _controller, onPageChangedWrapper: pageChangeListeners);
+
+    final pageView = PageView.builder(
+      reverse: widget.reverse,
+      controller: _controller,
+      onPageChanged: pageChangeListeners.onPageChanged,
+      itemCount: itemCount,
+      itemBuilder: _buildItem,
+      scrollDirection: widget.scrollDirection,
+      physics: _locked ? const NeverScrollableScrollPhysics() : widget.scrollPhysics,
+    );
+
+    return PageViewWrapper(
+      pageView: pageView,
+      controller: customController,
+    );
+  }
+
+  PageView _getPageView() {
     return PageView.builder(
       reverse: widget.reverse,
       controller: _controller,
@@ -210,8 +243,7 @@ class _PhotoViewGalleryState extends State<PhotoViewGallery> {
       itemCount: itemCount,
       itemBuilder: _buildItem,
       scrollDirection: widget.scrollDirection,
-      physics:
-          _locked ? const NeverScrollableScrollPhysics() : widget.scrollPhysics,
+      physics: _locked ? const NeverScrollableScrollPhysics() : widget.scrollPhysics,
     );
   }
 
@@ -222,6 +254,7 @@ class _PhotoViewGalleryState extends State<PhotoViewGallery> {
     final PhotoView photoView = isCustomChild
         ? PhotoView.customChild(
             key: ObjectKey(index),
+            index: index,
             child: pageOption.child,
             childSize: pageOption.childSize,
             backgroundDecoration: widget.backgroundDecoration,
@@ -238,9 +271,11 @@ class _PhotoViewGalleryState extends State<PhotoViewGallery> {
             scaleStateCycle: pageOption.scaleStateCycle,
             onTapUp: pageOption.onTapUp,
             onTapDown: pageOption.onTapDown,
+            isCanVerticalSlide: pageOption.isCanVerticalSlide,
           )
         : PhotoView(
             key: ObjectKey(index),
+            index: index,
             imageProvider: pageOption.imageProvider,
             loadingChild: widget.loadingChild,
             backgroundDecoration: widget.backgroundDecoration,
@@ -258,6 +293,7 @@ class _PhotoViewGalleryState extends State<PhotoViewGallery> {
             scaleStateCycle: pageOption.scaleStateCycle,
             onTapUp: pageOption.onTapUp,
             onTapDown: pageOption.onTapDown,
+            isCanVerticalSlide: pageOption.isCanVerticalSlide,
           );
 
     return ClipRect(
@@ -265,8 +301,7 @@ class _PhotoViewGalleryState extends State<PhotoViewGallery> {
     );
   }
 
-  PhotoViewGalleryPageOptions _buildPageOption(
-      BuildContext context, int index) {
+  PhotoViewGalleryPageOptions _buildPageOption(BuildContext context, int index) {
     if (widget._isBuilder) {
       return widget.builder(context, index);
     }
@@ -279,37 +314,39 @@ class _PhotoViewGalleryState extends State<PhotoViewGallery> {
 /// The [maxScale], [minScale] and [initialScale] options may be [double] or a [PhotoViewComputedScale] constant
 ///
 class PhotoViewGalleryPageOptions {
-  PhotoViewGalleryPageOptions(
-      {Key key,
-      @required this.imageProvider,
-      this.heroTag,
-      this.minScale,
-      this.maxScale,
-      this.initialScale,
-      this.controller,
-      this.scaleStateController,
-      this.basePosition,
-      this.scaleStateCycle,
-      this.onTapUp,
-      this.onTapDown})
-      : child = null,
+  PhotoViewGalleryPageOptions({
+    Key key,
+    @required this.imageProvider,
+    this.heroTag,
+    this.minScale,
+    this.maxScale,
+    this.initialScale,
+    this.controller,
+    this.scaleStateController,
+    this.basePosition,
+    this.scaleStateCycle,
+    this.onTapUp,
+    this.onTapDown,
+    this.isCanVerticalSlide = false,
+  })  : child = null,
         childSize = null,
         assert(imageProvider != null);
 
-  PhotoViewGalleryPageOptions.customChild(
-      {@required this.child,
-      @required this.childSize,
-      this.heroTag,
-      this.minScale,
-      this.maxScale,
-      this.initialScale,
-      this.controller,
-      this.scaleStateController,
-      this.basePosition,
-      this.scaleStateCycle,
-      this.onTapUp,
-      this.onTapDown})
-      : imageProvider = null,
+  PhotoViewGalleryPageOptions.customChild({
+    @required this.child,
+    @required this.childSize,
+    this.heroTag,
+    this.minScale,
+    this.maxScale,
+    this.initialScale,
+    this.controller,
+    this.scaleStateController,
+    this.basePosition,
+    this.scaleStateCycle,
+    this.onTapUp,
+    this.onTapDown,
+    this.isCanVerticalSlide = false,
+  })  : imageProvider = null,
         assert(child != null),
         assert(childSize != null);
 
@@ -351,4 +388,6 @@ class PhotoViewGalleryPageOptions {
 
   /// Mirror to [PhotoView.onTapDown]
   final PhotoViewImageTapDownCallback onTapDown;
+
+  final bool isCanVerticalSlide;
 }

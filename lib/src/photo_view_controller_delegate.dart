@@ -20,7 +20,7 @@ class PhotoViewControllerDelegate {
   final ScaleBoundaries scaleBoundaries;
   final ScaleStateCycle scaleStateCycle;
   final Alignment basePosition;
-
+  OffsetWrapper _lastOffsetWrapper;
   Function(double prevScale, double nextScale) _animateScale;
 
   void startListeners() {
@@ -36,18 +36,15 @@ class PhotoViewControllerDelegate {
       controller.setScaleInvisibly(scale);
       return;
     }
-    final double prevScale = controller.scale ??
-        getScaleForScaleState(
-            scaleStateController.prevScaleState, scaleBoundaries);
+    final double prevScale =
+        controller.scale ?? getScaleForScaleState(scaleStateController.prevScaleState, scaleBoundaries);
 
-    final double nextScale =
-        getScaleForScaleState(scaleStateController.scaleState, scaleBoundaries);
+    final double nextScale = getScaleForScaleState(scaleStateController.scaleState, scaleBoundaries);
 
     _animateScale(prevScale, nextScale);
   }
 
-  void addAnimateOnScaleStateUpdate(
-      void animateScale(double prevScale, double nextScale)) {
+  void addAnimateOnScaleStateUpdate(void animateScale(double prevScale, double nextScale)) {
     _animateScale = animateScale;
   }
 
@@ -56,17 +53,14 @@ class PhotoViewControllerDelegate {
       return;
     }
     final PhotoViewScaleState newScaleState =
-        (scale > scaleBoundaries.initialScale)
-            ? PhotoViewScaleState.zoomedIn
-            : PhotoViewScaleState.zoomedOut;
+        (scale > scaleBoundaries.initialScale) ? PhotoViewScaleState.zoomedIn : PhotoViewScaleState.zoomedOut;
 
     scaleStateController.setInvisibly(newScaleState);
     controller.position = clampPosition(controller.position);
   }
 
   double get scale {
-    return controller.scale ??
-        getScaleForScaleState(scaleStateController.scaleState, scaleBoundaries);
+    return controller.scale ?? getScaleForScaleState(scaleStateController.scaleState, scaleBoundaries);
   }
 
   set scale(double scale) {
@@ -80,10 +74,7 @@ class PhotoViewControllerDelegate {
     Offset rotationFocusPoint,
   }) {
     controller.updateMultiple(
-        position: position,
-        scale: scale,
-        rotation: rotation,
-        rotationFocusPoint: rotationFocusPoint);
+        position: position, scale: scale, rotation: rotation, rotationFocusPoint: rotationFocusPoint);
   }
 
   void updateScaleStateFromNewScale(double scaleFactor, double newScale) {
@@ -92,29 +83,24 @@ class PhotoViewControllerDelegate {
     }
 
     final PhotoViewScaleState newScaleState =
-        (newScale > scaleBoundaries.initialScale)
-            ? PhotoViewScaleState.zoomedIn
-            : PhotoViewScaleState.zoomedOut;
+        (newScale > scaleBoundaries.initialScale) ? PhotoViewScaleState.zoomedIn : PhotoViewScaleState.zoomedOut;
 
     scaleStateController.setInvisibly(newScaleState);
   }
 
   void checkAndSetToInitialScaleState() {
-    if (scaleStateController.scaleState != PhotoViewScaleState.initial &&
-        scale == scaleBoundaries.initialScale) {
+    if (scaleStateController.scaleState != PhotoViewScaleState.initial && scale == scaleBoundaries.initialScale) {
       scaleStateController.setInvisibly(PhotoViewScaleState.initial);
     }
   }
 
   void nextScaleState() {
     final PhotoViewScaleState scaleState = scaleStateController.scaleState;
-    if (scaleState == PhotoViewScaleState.zoomedIn ||
-        scaleState == PhotoViewScaleState.zoomedOut) {
+    if (scaleState == PhotoViewScaleState.zoomedIn || scaleState == PhotoViewScaleState.zoomedOut) {
       scaleStateController.scaleState = scaleStateCycle(scaleState);
       return;
     }
-    final double originalScale =
-        getScaleForScaleState(scaleState, scaleBoundaries);
+    final double originalScale = getScaleForScaleState(scaleState, scaleBoundaries);
 
     double prevScale = originalScale;
     PhotoViewScaleState prevScaleState = scaleState;
@@ -157,18 +143,49 @@ class PhotoViewControllerDelegate {
     final double minY = ((positionY - 1).abs() / 2) * heightDiff * -1;
     final double maxY = ((positionY + 1).abs() / 2) * heightDiff;
 
-    final double computedX =
-        screenWidth < computedWidth ? x.clamp(minX, maxX) : 0.0;
+    final double computedX = screenWidth < computedWidth ? x.clamp(minX, maxX) : 0.0;
 
-    final double computedY =
-        screenHeight < computedHeight ? y.clamp(minY, maxY) : 0.0;
+    final double computedY = screenHeight < computedHeight ? y.clamp(minY, maxY) : 0.0;
 
-    return Offset(computedX, computedY);
+    final position = Offset(computedX, computedY);
+    final result = OffsetWrapper(position, x < minX, x > maxX);
+    _lastOffsetWrapper = result;
+    return position;
+  }
+
+  bool canMove(double scale, Offset delta) {
+    if (scale != 1.0) {
+      //when child is zooming
+      return true;
+    }
+    if (_lastOffsetWrapper != null) {
+      final moveRight = delta.dx < 0;
+      if (_lastOffsetWrapper.reachLeftBound) {
+        return moveRight;
+      } else if (_lastOffsetWrapper.reachRightBound) {
+        return !moveRight;
+      }
+    }
+
+    return scaleStateController.scaleState != PhotoViewScaleState.initial;
   }
 
   void dispose() {
     _animateScale = null;
     controller.removeIgnorableListener(_blindScaleListener);
     scaleStateController.removeIgnorableListener(_blindScaleStateListener);
+  }
+}
+
+class OffsetWrapper {
+  OffsetWrapper(this.position, this.reachRightBound, this.reachLeftBound);
+
+  final bool reachLeftBound;
+  final bool reachRightBound;
+  final Offset position;
+
+  @override
+  String toString() {
+    return "reachLeftBound=$reachRightBound, reachRightBound=$reachLeftBound, offset=$position";
   }
 }
